@@ -1,0 +1,80 @@
+{
+  "description": "Test vectors for the Life Cipher's key check (SPEC.md \u00a76.1, \u00a715)",
+  "status": "published with SPEC.md draft 0.4 (\u00a71.1, \u00a715): any change that alters an output needs a new algorithm version",
+  "spec": "SPEC.md draft 0.4",
+  "algorithm_version": 1,
+  "conventions": "grids are 32 row words in hex (SPEC.md \u00a72.2); D is the number of distinct generations before the first repeat (\u00a79.1), and the check passes exactly when D is at least T",
+  "cases": [
+    {
+      "name": "the demo key (Appendix B)",
+      "key": "6B3028A8 DB46016A 318DA713 85D82A92 6489431E 9A2B00E1 1CB1E684 4106B26D 90FC90AC 77361985 884930EB 551A3B52 81186009 E8144094 82842900 D88996D1 9514CC13 3A81EC34 47580B9D F304B451 84A2B274 24122838 08F6D934 3A69CBB8 6A04296A 5F54D36A 42549769 1420992C 30F90206 7215518A 1CE02869 BA961C3B",
+      "D": 6199,
+      "checks": [
+        {
+          "T": 6000,
+          "passes": true
+        },
+        {
+          "T": 6199,
+          "passes": true
+        },
+        {
+          "T": 6200,
+          "passes": false
+        }
+      ]
+    },
+    {
+      "name": "an empty grid",
+      "key": "00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000",
+      "D": 1,
+      "checks": [
+        {
+          "T": 6000,
+          "passes": false
+        }
+      ]
+    },
+    {
+      "name": "a blinker",
+      "key": "00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00380000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000",
+      "D": 2,
+      "checks": [
+        {
+          "T": 6000,
+          "passes": false
+        }
+      ]
+    },
+    {
+      "name": "a glider",
+      "key": "40000000 20000000 E0000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000",
+      "D": 128,
+      "checks": [
+        {
+          "T": 128,
+          "passes": true
+        },
+        {
+          "T": 129,
+          "passes": false
+        },
+        {
+          "T": 6000,
+          "passes": false
+        }
+      ]
+    },
+    {
+      "name": "the vectors' IV, used as a key",
+      "key": "0D141B22 2930373E 454C535A 61686F76 7D848B92 99A0A7AE B5BCC3CA D1D8DFE6 EDF4FB02 0910171E 252C333A 41484F56 5D646B72 7980878E 959CA3AA B1B8BFC6 CDD4DBE2 E9F0F7FE 050C131A 21282F36 3D444B52 5960676E 757C838A 91989FA6 ADB4BBC2 C9D0D7DE E5ECF3FA 01080F16 1D242B32 3940474E 555C636A 71787F86",
+      "D": 1006,
+      "checks": [
+        {
+          "T": 6000,
+          "passes": false
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,48 @@
+# golangci-lint configuration (v2). Run with `mise run lint`; `mise run fmt` formats the code.
+version: "2"
+
+linters:
+  # standard: errcheck, govet, ineffassign, staticcheck and unused
+  default: standard
+  enable:
+    - errorlint     # errors compared and type-asserted in a way that survives wrapping
+    - gocritic      # common mistakes and simplifications
+    - gosec         # security problems
+    - misspell      # American spelling, in code and comments
+    - nolintlint    # every //nolint names its linter and says why
+    - revive        # Go style, including doc comments on exported names
+    - unconvert     # unnecessary conversions
+    - unparam       # unused function parameters and results
+    - usestdlibvars # the standard library's named constants
+  settings:
+    gocritic:
+      disabled-checks:
+        - captLocal # parameters named after SPEC.md's symbols, such as T, G and L
+    govet:
+      enable-all: true
+      disable:
+        - fieldalignment # field order follows meaning, not padding
+    gosec:
+      excludes:
+        # A command-line tool opens the files its user names.
+        - G304
+        # Integer conversions: the cipher narrows words on purpose (row words from 64-bit pairs, bytes from row
+        # words, r mod 2^32 for the selector), and the parameter checks bound every other conversion.
+        - G115
+    misspell:
+      locale: US
+    nolintlint:
+      require-explanation: true
+      require-specific: true
+  exclusions:
+    presets:
+    rules:
+      # Tests draw their data from seeded math/rand generators on purpose, so that every run sees the same cases.
+      - path: _test\.go
+        linters:
+          - gosec
+
+formatters:
+  enable:
+    - gofmt
+    - goimports

@@ -1,0 +1,7 @@
+# Caches that mise.toml keeps inside the repo
+/.cache/
+
+# Build outputs and the coverage profile
+/bin/
+/dist/
+/coverage.out

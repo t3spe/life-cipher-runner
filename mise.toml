@@ -1,0 +1,63 @@
+# Tooling for this repo, managed by mise. Run `mise install` once in the repo, then `mise run <task>`, or
+# `mise exec -- <command>` for anything else.
+[tools]
+go = "1.27.3"
+golangci-lint = "2.15.0"
+
+[env]
+# Go uses only the toolchain pinned above, and keeps its caches inside the repo (git ignores .cache/).
+GOTOOLCHAIN = "local"
+GOPATH = "{{config_root}}/.cache/go"
+GOMODCACHE = "{{config_root}}/.cache/go/pkg/mod"
+GOCACHE = "{{config_root}}/.cache/go-build"
+GOLANGCI_LINT_CACHE = "{{config_root}}/.cache/golangci-lint"
+
+# Common commands, run from the repo root: `mise run <task>`.
+[tasks.build]
+description = "Build the lce command for this machine into bin/"
+env = { CGO_ENABLED = "0" }
+run = "go build -trimpath -o bin/ ./cmd/lce"
+
+[tasks.test]
+description = "Run every test"
+run = "go test ./..."
+
+[tasks.cover]
+description = "Run every test with coverage across all packages, and fail if any statement isn't covered"
+run = [
+    "go test -coverpkg=./... -coverprofile=coverage.out ./...",
+    "go run tools/covercheck.go coverage.out",
+]
+
+[tasks.lint]
+description = "Lint the code and check its formatting (golangci-lint, which includes go vet and staticcheck)"
+run = "golangci-lint run"
+
+[tasks.fmt]
+description = "Format the code"
+run = "golangci-lint fmt"
+
+[tasks.cross]
+description = "Vet the code for every target platform, then build the command for each into dist/"
+run = "go run tools/crossbuild.go"
+
+[tasks.fuzz]
+description = "Run each fuzz target for a while (FUZZTIME, default 30s)"
+run = [
+    "go test -run=^$ -fuzz=^FuzzLife$ -fuzztime={{env.FUZZTIME | default(value='30s')}} ./lifecipher",
+    "go test -run=^$ -fuzz=^FuzzSealOpen$ -fuzztime={{env.FUZZTIME | default(value='30s')}} ./lifecipher",
+    "go test -run=^$ -fuzz=^FuzzStreaming$ -fuzztime={{env.FUZZTIME | default(value='30s')}} ./lifecipher",
+    "go test -run=^$ -fuzz=^FuzzParse$ -fuzztime={{env.FUZZTIME | default(value='30s')}} ./internal/keyfile",
+    "go test -run=^$ -fuzz=^FuzzDecrypt$ -fuzztime={{env.FUZZTIME | default(value='30s')}} ./internal/container",
+    "go test -run=^$ -fuzz=^FuzzReader$ -fuzztime={{env.FUZZTIME | default(value='30s')}} ./internal/armor",
+    "go test -run=^$ -fuzz=^FuzzWriter$ -fuzztime={{env.FUZZTIME | default(value='30s')}} ./internal/armor",
+]
+
+[tasks.race]
+description = "Run every test under the race detector, which needs cgo and so a C compiler"
+env = { CGO_ENABLED = "1" }
+run = "go test -race ./..."
+
+[tasks.check]
+description = "Everything that must pass before a commit: lint, the tests with the coverage gate, the cross builds"
+depends = ["lint", "cover", "cross"]
