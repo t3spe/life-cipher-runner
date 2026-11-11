@@ -199,6 +199,9 @@ for any operands (SPEC.md §14), and those cores can promise that:
 | `mise run cross` | vets the code, tests included, for every target, and builds each |
 | `mise run check` | lint, cover and cross: what must pass before a commit |
 
+For every push to main and every pull request, GitHub Actions runs the tests on Linux, macOS and Windows, the race
+detector on Linux and macOS, and `mise run check` on Linux (`.github/workflows/ci.yml`).
+
 ### How it's tested
 
 - **The published vectors.** The `lifecipher` package reproduces every value in all three of the spec's vector files.
@@ -243,6 +246,7 @@ for any operands (SPEC.md §14), and those cores can promise that:
 | `internal/keyfile/` | reading key files |
 | `lifecipher/` | the cipher: key setup, a `crypto/cipher.AEAD`, and an incremental API for long messages |
 | `tools/` | the coverage gate and the cross builds, run by the mise tasks |
+| `.github/workflows/` | CI on Linux, macOS and Windows |
 
 ## Speed
 

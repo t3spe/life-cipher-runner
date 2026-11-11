@@ -1,0 +1,3 @@
+# Every text file is checked out with LF line endings, on Windows too: tests compare files byte for byte, the
+# published test vectors against their SHA-256 digests, and the README's example against the code's.
+* text=auto eol=lf

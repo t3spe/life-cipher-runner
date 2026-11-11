@@ -369,7 +369,7 @@ func TestKeyRefused(t *testing.T) {
 			"aren't all distinct, so it can't be a vetted key"},
 		{empty, notes, "fails the key check"},
 		// INPUT is opened before the key setup, so its problems show at once.
-		{glider, missingInput, "open " + missingInput + ": no such file or directory"},
+		{glider, missingInput, "open " + missingInput + ": "}, // and the system's reason
 		{bad, notes, "reading the key: " + bad + ": not a key"},
 		{filepath.Join(dir, "missing.key"), notes, "reading the key: open "},
 	} {
@@ -407,10 +407,9 @@ func TestOutputRules(t *testing.T) {
 	missingDir := filepath.Join(dir, "no", "such", "dir.lc")
 	underFile := filepath.Join(notes, "out.lc")
 	expect(t, run(t, "encrypt", "-k", key, "-o", dir, "-f", notes), ExitFailure, "OUTPUT "+dir+" is a directory")
-	expect(t, run(t, "encrypt", "-k", key, "-o", missingDir, notes), ExitFailure,
-		"lce encrypt: OUTPUT "+missingDir+": no such file or directory")
-	expect(t, run(t, "encrypt", "-k", key, "-o", underFile, notes), ExitFailure,
-		"lce encrypt: OUTPUT "+underFile+": not a directory")
+	// The reason follows, in the system's own words.
+	expect(t, run(t, "encrypt", "-k", key, "-o", missingDir, notes), ExitFailure, "lce encrypt: OUTPUT "+missingDir+": ")
+	expect(t, run(t, "encrypt", "-k", key, "-o", underFile, notes), ExitFailure, "lce encrypt: OUTPUT "+underFile+": ")
 	expect(t, run(t, "encrypt", "-k", key, "-o", key, "-f", notes), ExitFailure, "OUTPUT "+key+" is the key file")
 	if string(read(t, key)) != demoKey {
 		t.Fatal("the key file changed")
@@ -430,26 +429,30 @@ func TestOutputRules(t *testing.T) {
 	}
 }
 
-func TestOutputLinks(t *testing.T) {
-	// Replacing a link would leave the file it points to, or the file's other names, as they were: lce refuses.
+// symlink makes a symbolic link at path, or skips the test where the system won't: Windows needs a privilege for it.
+func symlink(t *testing.T, target, path string) {
+	t.Helper()
+	if err := os.Symlink(target, path); err != nil {
+		if runtime.GOOS == "windows" {
+			t.Skipf("can't make a symbolic link here: %v", err)
+		}
+		t.Fatal(err)
+	}
+}
+
+func TestOutputHardLinks(t *testing.T) {
+	// Replacing a file with other hard links would leave its other names as they were: lce refuses, even with -f.
 	t.Parallel()
 	dir, key := workspace(t)
 	notes := put(t, filepath.Join(dir, "notes.txt"), []byte("notes"))
-	symlink, dangling, hardLink := filepath.Join(dir, "symlink"), filepath.Join(dir, "dangling"), filepath.Join(dir, "hard")
-	for _, err := range []error{
-		os.Symlink(notes, symlink), os.Symlink(filepath.Join(dir, "nowhere"), dangling), os.Link(notes, hardLink),
-	} {
-		if err != nil {
-			t.Fatal(err)
-		}
+	hardLink := filepath.Join(dir, "hard")
+	if err := os.Link(notes, hardLink); err != nil {
+		t.Fatal(err)
 	}
 	for _, c := range []struct {
 		args []string
 		want string
 	}{
-		{[]string{"-f", "-o", symlink, symlink}, "OUTPUT " + symlink + " is a symbolic link: name the file it points to"},
-		{[]string{"-f", "-o", symlink, notes}, "is a symbolic link"},
-		{[]string{"-o", dangling, notes}, "OUTPUT " + dangling + " is a symbolic link"},
 		{[]string{"-f", "-o", hardLink, hardLink}, "OUTPUT " + hardLink + " has other hard links, " +
 			"which replacing it would leave as they are"},
 		{[]string{"-f", "-o", notes, notes}, "OUTPUT " + notes + " has other hard links"},
@@ -458,12 +461,39 @@ func TestOutputLinks(t *testing.T) {
 		expect(t, run(t, slices.Concat([]string{"encrypt", "-k", key}, c.args)...), ExitFailure, c.want)
 	}
 	if string(read(t, notes)) != "notes" || string(read(t, hardLink)) != "notes" {
-		t.Error("a link's file changed")
+		t.Error("a linked file changed")
+	}
+	if !slices.Equal(files(t, dir), []string{"hard", "key.txt", "notes.txt"}) {
+		t.Errorf("left behind: %v", files(t, dir))
+	}
+}
+
+func TestOutputSymlinks(t *testing.T) {
+	// Replacing a symbolic link would leave the file it points to as it was: lce refuses, even with -f, and even a
+	// link that points nowhere.
+	t.Parallel()
+	dir, key := workspace(t)
+	notes := put(t, filepath.Join(dir, "notes.txt"), []byte("notes"))
+	link, dangling := filepath.Join(dir, "symlink"), filepath.Join(dir, "dangling")
+	symlink(t, notes, link)
+	symlink(t, filepath.Join(dir, "nowhere"), dangling)
+	for _, c := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"-f", "-o", link, link}, "OUTPUT " + link + " is a symbolic link: name the file it points to"},
+		{[]string{"-f", "-o", link, notes}, "is a symbolic link"},
+		{[]string{"-o", dangling, notes}, "OUTPUT " + dangling + " is a symbolic link"},
+	} {
+		expect(t, run(t, slices.Concat([]string{"encrypt", "-k", key}, c.args)...), ExitFailure, c.want)
+	}
+	if string(read(t, notes)) != "notes" {
+		t.Error("the link's file changed")
 	}
 	if _, err := os.Lstat(filepath.Join(dir, "nowhere")); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("writing through a dangling link: %v", err)
 	}
-	if !slices.Equal(files(t, dir), []string{"dangling", "hard", "key.txt", "notes.txt", "symlink"}) {
+	if !slices.Equal(files(t, dir), []string{"dangling", "key.txt", "notes.txt", "symlink"}) {
 		t.Errorf("left behind: %v", files(t, dir))
 	}
 }
@@ -504,25 +534,31 @@ func TestOutputAppears(t *testing.T) {
 		{"a file, without -f", false, theirs, " exists: use -f to replace it"},
 		{"a symbolic link, with -f", true, link, " is a symbolic link: name the file it points to"},
 	} {
-		for _, cmd := range []string{"encrypt", "decrypt"} {
-			out := filepath.Join(dir, "out")
-			ct := run(t, "encrypt", "-k", key, "-b", target).stdout
-			in := &appearing{t: t, path: out, file: c.file, r: strings.NewReader(ct)}
-			args := []string{cmd, "-k", key, "-o", out}
+		t.Run(c.name, func(t *testing.T) {
 			if c.force {
-				args = append(args, "-f")
+				symlink(t, target, filepath.Join(t.TempDir(), "probe")) // skips where links can't be made
 			}
-			status, stderr := runTo(t, in, io.Discard, args...)
-			if status != ExitFailure || stderr != "lce "+cmd+": OUTPUT "+out+c.want+"\n" {
-				t.Errorf("%s, %s: status %d, %q", c.name, cmd, status, stderr)
+			for _, cmd := range []string{"encrypt", "decrypt"} {
+				out := filepath.Join(dir, "out")
+				ct := run(t, "encrypt", "-k", key, "-b", target).stdout
+				in := &appearing{t: t, path: out, file: c.file, r: strings.NewReader(ct)}
+				args := []string{cmd, "-k", key, "-o", out}
+				if c.force {
+					args = append(args, "-f")
+				}
+				status, stderr := runTo(t, in, io.Discard, args...)
+				if status != ExitFailure || stderr != "lce "+cmd+": OUTPUT "+out+c.want+"\n" {
+					t.Errorf("%s: status %d, %q", cmd, status, stderr)
+				}
+				want := map[bool]string{false: "theirs", true: "target"}[c.force]
+				if data, err := os.ReadFile(out); err != nil || string(data) != want {
+					t.Errorf("%s: OUTPUT holds %q, %v", cmd, data, err)
+				}
+				if err := os.Remove(out); err != nil {
+					t.Fatal(err)
+				}
 			}
-			if data, err := os.ReadFile(out); err != nil || string(data) != map[bool]string{false: "theirs", true: "target"}[c.force] {
-				t.Errorf("%s, %s: OUTPUT holds %q, %v", c.name, cmd, data, err)
-			}
-			if err := os.Remove(out); err != nil {
-				t.Fatal(err)
-			}
-		}
+		})
 	}
 	if !slices.Equal(files(t, dir), []string{"key.txt", "target"}) {
 		t.Errorf("left behind: %v", files(t, dir))
@@ -765,6 +801,12 @@ func TestInterrupted(t *testing.T) {
 	}
 }
 
+// notFound reports whether err is about OUTPUT, path, and says that a file or directory isn't there, in whatever words
+// the system has for that.
+func notFound(err error, path string) bool {
+	return errors.Is(err, fs.ErrNotExist) && strings.HasPrefix(err.Error(), "OUTPUT "+path+": ")
+}
+
 // warnings collects writeFile's warnings.
 type warnings []string
 
@@ -807,8 +849,7 @@ func TestWriteFile(t *testing.T) {
 	}
 	// And a temporary file that can't be created.
 	missing := filepath.Join(dir, "missing", "out")
-	if err = writeFile(ctx, &g, missing, false, write("x"), warned.warn); err == nil ||
-		err.Error() != "OUTPUT "+missing+": no such file or directory" {
+	if err = writeFile(ctx, &g, missing, false, write("x"), warned.warn); !notFound(err, missing) {
 		t.Errorf("no directory: %v", err)
 	}
 
@@ -863,36 +904,17 @@ func TestWriteFile(t *testing.T) {
 	// Renaming fails, here because the temporary file is gone.
 	link = func(tmp, _ string) error { return cmp.Or(os.Remove(tmp), errors.ErrUnsupported) }
 	gone := filepath.Join(dir, "gone")
-	if err := writeFile(ctx, &g, gone, false, write("x"), warned.warn); err == nil || err.Error() != "OUTPUT "+gone+
-		": no such file or directory" {
+	if err := writeFile(ctx, &g, gone, false, write("x"), warned.warn); !notFound(err, gone) {
 		t.Errorf("a failed rename: %v", err)
 	}
 	// So does a rename that refuses to replace a file, here for the same reason.
 	renameNew = func(tmp, path string) error { return cmp.Or(os.Remove(tmp), renameNoReplace(tmp, path)) }
-	if err := writeFile(ctx, &g, gone, false, write("x"), warned.warn); err == nil || err.Error() != "OUTPUT "+gone+
-		": no such file or directory" {
+	if err := writeFile(ctx, &g, gone, false, write("x"), warned.warn); !notFound(err, gone) {
 		t.Errorf("a failed rename that refuses to replace: %v", err)
 	}
 
 	if len(warned) > 0 || !slices.Equal(files(t, dir), []string{"linked", "out", "renamed"}) {
 		t.Errorf("warnings %q, and left behind: %v", warned, files(t, dir))
-	}
-}
-
-func TestFlush(t *testing.T) {
-	var warned warnings
-	flush(nil, "out", warned.warn) // a directory lce couldn't open: nothing to do
-	d, err := os.Open(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	flush(d, "out", warned.warn)
-	if len(warned) != 0 || d.Close() == nil {
-		t.Fatalf("flushing a directory: warnings %q, and it's still open", warned)
-	}
-	flush(d, "out", warned.warn) // closed already, so flushing it fails
-	if len(warned) != 1 || !strings.HasPrefix(warned[0], "OUTPUT out is written, but flushing its directory to disk failed: ") {
-		t.Errorf("a failed flush: %q", warned)
 	}
 }
 
@@ -967,6 +989,9 @@ func TestGuard(t *testing.T) {
 	}
 	a, b, c := create(), create(), create()
 	g.discard(a)
+	if err := c.Close(); err != nil { // as writeFile does before it publishes: Windows can't rename an open file
+		t.Fatal(err)
+	}
 	if err := g.publish(t.Context(), c, func() error { return os.Rename(c.Name(), filepath.Join(dir, "c")) }); err != nil {
 		t.Fatal(err)
 	}

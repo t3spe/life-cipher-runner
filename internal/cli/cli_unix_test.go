@@ -51,6 +51,24 @@ func TestOutputMode(t *testing.T) {
 	}
 }
 
+func TestFlush(t *testing.T) {
+	// Unix only: Windows can't flush a directory, so lce never opens one there.
+	var warned warnings
+	flush(nil, "out", warned.warn) // a directory lce couldn't open: nothing to do
+	d, err := os.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	flush(d, "out", warned.warn)
+	if len(warned) != 0 || d.Close() == nil {
+		t.Fatalf("flushing a directory: warnings %q, and it's still open", warned)
+	}
+	flush(d, "out", warned.warn) // closed already, so flushing it fails
+	if len(warned) != 1 || !strings.HasPrefix(warned[0], "OUTPUT out is written, but flushing its directory to disk failed: ") {
+		t.Errorf("a failed flush: %q", warned)
+	}
+}
+
 func TestOpenDir(t *testing.T) {
 	if d := openDir(t.TempDir()); d == nil || d.Close() != nil {
 		t.Error("a directory didn't open")
