@@ -3,6 +3,7 @@
 [tools]
 go = "1.27.3"
 golangci-lint = "2.15.0"
+gh = "2.103.3" # GitHub's command line, for releases
 
 [env]
 # Go uses only the toolchain pinned above, and keeps its caches inside the repo (git ignores .cache/).

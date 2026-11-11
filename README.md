@@ -166,7 +166,8 @@ about a third longer still. The text form's BEGIN line stands for the magic and 
 
 ## Building
 
-The tools come from `mise.toml`: Go and golangci-lint, pinned, with Go's caches kept inside the repository.
+The tools come from `mise.toml`: Go, golangci-lint and gh (for releases), pinned, with Go's caches kept inside the
+repository.
 
 ```
 mise install          # once
